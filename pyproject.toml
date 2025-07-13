@@ -1,0 +1,15 @@
+[project]
+name = "7xai-challenge-day1-voice-agent"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "elevenlabs>=2.7.1",
+    "fastapi[standard]>=0.116.1",
+    "groq>=0.30.0",
+    "numpy>=2.3.1",
+    "pydantic>=2.11.7",
+    "python-dotenv>=1.1.1",
+    "python-multipart>=0.0.20",
+    "soundfile>=0.13.1",
+]

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Voice Stream - Live Audio</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background-color: #111827;
+      color: #F9FAFB;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      color: #60A5FA;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background-color: #2563EB;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #1D4ED8;
+    }
+
+    button:disabled {
+      background-color: #1E293B;
+      cursor: not-allowed;
+    }
+
+    .log {
+      margin-top: 30px;
+      max-width: 500px;
+      font-size: 0.9rem;
+      color: #9CA3AF;
+      background-color: #1F2937;
+      padding: 10px 15px;
+      border-radius: 8px;
+      height: 150px;
+      overflow-y: auto;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎙️ Voice Stream</h1>
+  <div class="controls">
+    <button id="startBtn">Iniciar</button>
+    <button id="stopBtn" disabled>Parar</button>
+  </div>
+  <div class="log" id="logBox">Conexão aguardando...</div>
+
+  <script>
+    let mediaRecorder;
+    let socket;
+    let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    let reconnecting = false;
+    let pingInterval;
+
+    const logBox = document.getElementById("logBox");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    function log(message) {
+      const now = new Date().toLocaleTimeString();
+      logBox.textContent += `[${now}] ${message}\n`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function connectSocket() {
+      socket = new WebSocket("ws://localhost:8000/ws/audio");
+      socket.binaryType = "arraybuffer";
+
+      socket.onopen = () => {
+        log("✅ WebSocket conectado.");
+        reconnecting = false;
+
+        // Ping automático a cada 15s
+        pingInterval = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(new TextEncoder().encode("ping"));
+          }
+        }, 15000);
+      };
+
+      socket.onmessage = async (event) => {
+        if (typeof event.data === "string" && event.data === "pong") return;
+
+        try {
+          console.log(event.data);
+          const audioBuffer = await audioContext.decodeAudioData(event.data);
+          const source = audioContext.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(audioContext.destination);
+          source.start();
+          log("🔊 Áudio reproduzido.");
+        } catch (err) {
+          log("❌ Erro ao reproduzir áudio.");
+          console.error(err);
+        }
+      };
+
+      socket.onclose = () => {
+        clearInterval(pingInterval);
+        if (!reconnecting) {
+          reconnecting = true;
+          log("⚠️ WebSocket desconectado. Tentando reconectar...");
+          setTimeout(connectSocket, 3000);
+        }
+      };
+
+      socket.onerror = (err) => {
+        log("❌ Erro no WebSocket.");
+        console.error(err);
+      };
+    }
+
+    startBtn.onclick = async () => {
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      connectSocket();
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+      mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+        event.data.arrayBuffer().then(buffer => {
+          socket.send(buffer);
+          log(`🎤 Chunk enviado: ${buffer.byteLength} bytes`);
+        });
+      }
+    };
+
+      mediaRecorder.start(5000); // 5 segundos por chunk
+      log("🎙️ Gravação iniciada.");
+    };
+
+    stopBtn.onclick = () => {
+      stopBtn.disabled = true;
+      startBtn.disabled = false;
+
+      mediaRecorder.stop();
+      socket.close();
+      clearInterval(pingInterval);
+      log("🛑 Gravação e WebSocket encerrados.");
+    };
+  </script>
+</body>
+</html>
