@@ -1,171 +1,223 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Voice Stream - Live Audio</title>
+  <title>J.A.R.V.I.S. - Just A Rather Very Intelligent System</title>
   <style>
     body {
       margin: 0;
-      font-family: "Segoe UI", Roboto, sans-serif;
-      background-color: #111827;
-      color: #F9FAFB;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #0a0e17;
+      color: #e0e0e0;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
+      position: relative;
+      text-shadow: 0 0 5px rgba(0, 150, 255, 0.5);
     }
 
     h1 {
-      font-size: 2rem;
-      margin-bottom: 20px;
-      color: #60A5FA;
+      font-size: 3rem;
+      margin-bottom: 5px;
+      color: #0096ff;
+      font-weight: 300;
+      letter-spacing: 2px;
+    }
+
+    h2 {
+      font-size: 1rem;
+      margin-bottom: 30px;
+      color: #ff7b00;
+      font-weight: 300;
+      letter-spacing: 1px;
     }
 
     .controls {
       display: flex;
-      gap: 10px;
+      gap: 15px;
     }
 
     button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
-      background-color: #2563EB;
-      color: white;
+      padding: 12px 25px;
+      border-radius: 4px;
+      background-color: rgba(0, 150, 255, 0.2);
+      color: #0096ff;
       font-size: 1rem;
       cursor: pointer;
-      transition: background-color 0.2s;
+      transition: all 0.3s;
+      border: 1px solid rgba(0, 150, 255, 0.5);
+      letter-spacing: 1px;
     }
 
     button:hover {
-      background-color: #1D4ED8;
+      background-color: rgba(0, 150, 255, 0.4);
+      box-shadow: 0 0 10px rgba(0, 150, 255, 0.5);
     }
 
     button:disabled {
-      background-color: #1E293B;
-      cursor: not-allowed;
+      background-color: rgba(255, 123, 0, 0.1);
+      color: #ff7b00;
+      border-color: rgba(255, 123, 0, 0.5);
     }
 
     .log {
       margin-top: 30px;
       max-width: 500px;
       font-size: 0.9rem;
-      color: #9CA3AF;
-      background-color: #1F2937;
-      padding: 10px 15px;
-      border-radius: 8px;
+      color: #e0e0e0;
+      background-color: rgba(10, 14, 23, 0.7);
+      padding: 15px 20px;
+      border-radius: 4px;
       height: 150px;
       overflow-y: auto;
       white-space: pre-line;
+      border: 1px solid rgba(0, 150, 255, 0.3);
+      box-shadow: 0 0 20px rgba(0, 150, 255, 0.2);
+      font-family: 'Courier New', monospace;
+    }
+
+    /* Audio Visualizer */
+    .audio-visual {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 150, 255, 0.8);
+      animation: pulse 1.5s infinite ease-in-out;
+      display: none;
+      box-shadow: 0 0 30px rgba(0, 150, 255, 0.5);
+    }
+
+    .audio-visual.active {
+      display: block !important;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.8;
+        box-shadow: 0 0 20px rgba(0, 150, 255, 0.5);
+      }
+      50% {
+        transform: translate(-50%, -50%) scale(1.3);
+        opacity: 1;
+        box-shadow: 0 0 50px rgba(0, 150, 255, 0.8);
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.8;
+        box-shadow: 0 0 20px rgba(0, 150, 255, 0.5);
+      }
     }
   </style>
 </head>
 <body>
-  <h1>🎙️ Voice Stream</h1>
-  <div class="controls">
-    <button id="startBtn">Iniciar</button>
-    <button id="stopBtn" disabled>Parar</button>
-  </div>
-  <div class="log" id="logBox">Conexão aguardando...</div>
+<h1>J.A.R.V.I.S.</h1>
+<h2>Just A Rather Very Intelligent System</h2>
+<div class="controls">
+  <button id="startBtn">ACTIVATE</button>
+  <button id="stopBtn" disabled>DEACTIVATE</button>
+</div>
+<div class="log" id="logBox">J.A.R.V.I.S. system ready. Awaiting activation...</div>
+<div class="audio-visual" id="visualCircle"></div>
 
-  <script>
-    let mediaRecorder;
-    let socket;
-    let audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    let reconnecting = false;
-    let pingInterval;
+<script>
+  let mediaRecorder;
+  let socket;
+  let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  let audioChunks = [];
 
-    const logBox = document.getElementById("logBox");
-    const startBtn = document.getElementById("startBtn");
-    const stopBtn = document.getElementById("stopBtn");
+  const logBox = document.getElementById("logBox");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const visualCircle = document.getElementById("visualCircle");
 
-    function log(message) {
-      const now = new Date().toLocaleTimeString();
-      logBox.textContent += `[${now}] ${message}\n`;
-      logBox.scrollTop = logBox.scrollHeight;
-    }
+  function log(message) {
+    const now = new Date().toLocaleTimeString();
+    logBox.textContent += `[${now}] ${message}\n`;
+    logBox.scrollTop = logBox.scrollHeight;
+  }
 
-    function connectSocket() {
-      socket = new WebSocket("ws://localhost:8000/ws/audio");
-      socket.binaryType = "arraybuffer";
+  function connectSocket(callback) {
+    socket = new WebSocket("ws://localhost:8000/ws/audio");
+    socket.binaryType = "arraybuffer";
 
-      socket.onopen = () => {
-        log("✅ WebSocket conectado.");
-        reconnecting = false;
+    socket.onopen = () => {
+      log("SYSTEM: WebSocket connection established.");
+      callback();
+    };
 
-        // Ping automático a cada 15s
-        pingInterval = setInterval(() => {
-          if (socket.readyState === WebSocket.OPEN) {
-            socket.send(new TextEncoder().encode("ping"));
-          }
-        }, 15000);
-      };
+    socket.onmessage = async (event) => {
+      try {
+        const arrayBuffer = event.data;
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
 
-      socket.onmessage = async (event) => {
-        if (typeof event.data === "string" && event.data === "pong") return;
+        source.onended = () => {
+          visualCircle.classList.remove("active");
+          log("🔈 Reprodução finalizada.");
+        };
 
-        try {
-          console.log(event.data);
-          const audioBuffer = await audioContext.decodeAudioData(event.data);
-          const source = audioContext.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(audioContext.destination);
-          source.start();
-          log("🔊 Áudio reproduzido.");
-        } catch (err) {
-          log("❌ Erro ao reproduzir áudio.");
-          console.error(err);
-        }
-      };
-
-      socket.onclose = () => {
-        clearInterval(pingInterval);
-        if (!reconnecting) {
-          reconnecting = true;
-          log("⚠️ WebSocket desconectado. Tentando reconectar...");
-          setTimeout(connectSocket, 3000);
-        }
-      };
-
-      socket.onerror = (err) => {
-        log("❌ Erro no WebSocket.");
+        visualCircle.classList.add("active");
+        source.start();
+        log("AUDIO: Playing back received data...");
+      } catch (err) {
+        log("ERROR: Audio playback failed.");
         console.error(err);
-      };
-    }
-
-    startBtn.onclick = async () => {
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-
-      connectSocket();
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-
-      mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-        event.data.arrayBuffer().then(buffer => {
-          socket.send(buffer);
-          log(`🎤 Chunk enviado: ${buffer.byteLength} bytes`);
-        });
       }
     };
 
-      mediaRecorder.start(5000); // 5 segundos por chunk
-      log("🎙️ Gravação iniciada.");
+    socket.onclose = () => {
+      log("SYSTEM: WebSocket connection terminated.");
     };
 
-    stopBtn.onclick = () => {
-      stopBtn.disabled = true;
-      startBtn.disabled = false;
-
-      mediaRecorder.stop();
-      socket.close();
-      clearInterval(pingInterval);
-      log("🛑 Gravação e WebSocket encerrados.");
+    socket.onerror = (err) => {
+      log("ERROR: WebSocket failure detected.");
+      console.error(err);
     };
-  </script>
+  }
+
+  startBtn.onclick = async () => {
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    mediaRecorder = new MediaRecorder(stream, {mimeType: "audio/webm"});
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.start();
+    log("SYSTEM: Audio capture activated.");
+  };
+
+  stopBtn.onclick = () => {
+    stopBtn.disabled = true;
+    startBtn.disabled = false;
+
+    mediaRecorder.stop();
+
+    connectSocket(async () => {
+      const blob = new Blob(audioChunks, {type: "audio/webm"});
+      const arrayBuffer = await blob.arrayBuffer();
+      socket.send(arrayBuffer);
+      log("SYSTEM: Audio data transmitted.");
+    });
+
+    log("SYSTEM: Audio capture deactivated.");
+  };
+</script>
 </body>
 </html>

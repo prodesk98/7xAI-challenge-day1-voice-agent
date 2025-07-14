@@ -20,6 +20,7 @@ templates = Jinja2Templates(directory="%s/public/templates" % _path)
 @app.websocket("/ws/audio")
 async def websocket_audio_endpoint(ws: WebSocket):
     await ws.accept()
+    audio_data = bytearray()
     print(
         "WebSocket connection established. Ready to receive audio data."
     )
@@ -32,6 +33,7 @@ async def websocket_audio_endpoint(ws: WebSocket):
                 continue
 
             print(f"Received audio data of length {len(data)} bytes.")
+            data = bytearray(data)
             await ws.send_bytes(await process(data))
     except Exception as e:
         print(f"Error during WebSocket communication: {e}")
